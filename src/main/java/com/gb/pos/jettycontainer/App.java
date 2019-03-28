@@ -2,30 +2,28 @@ package com.gb.pos.jettycontainer;
 
 import java.io.IOException;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 /**
  * Hello world!
  *
  */
 public class App {
 	
-	private static final Logger log = LoggerFactory.getLogger(App.class);
+	public static final String IS_FINISH = "jetty container setup done!";
 	
 	public static void main(String[] args) throws IOException {
-		HttpServer server = InjectorSingleton.getInstance().getInjector(new AppModule()).getInstance(HttpServer.class);
-		try {
-			server.start();
-		} catch (Exception e) {
-			log.error("", e);
-			System.exit(9999);
-		}
-		PidLockFileHandle pidLock = InjectorSingleton.getInstance().getInjector().getInstance(PidLockFileHandle.class);
+		
+		//在程序启动一开始，即加锁，防止连续启动多个报错
+		PidLockFileHandle pidLock = InjectorSingleton.getInstance().getInjector(new AppModule()).getInstance(PidLockFileHandle.class);
 		pidLock.writePid();
 		pidLock.lock();
-		System.out.println("jetty container setup done!");//方便监听容器是否启动完毕
-//		System.out.flush();
-//		System.out.close();
+		
+		try {
+			HttpServer server = InjectorSingleton.getInstance().getInjector().getInstance(HttpServer.class);
+			server.start();
+		} catch (Exception e) {
+			System.err.println(e.getMessage());
+			System.exit(9999);
+		}
+		System.out.println(IS_FINISH);//方便监听容器是否启动完毕
 	}
 }

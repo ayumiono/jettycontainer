@@ -7,6 +7,8 @@ import java.lang.reflect.Method;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -24,9 +26,6 @@ import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.inject.Inject;
-import com.google.inject.name.Named;
-
 public class MultipleDubboBootContainer {
 
 	private static final Logger log = LoggerFactory.getLogger("MultipleDubboBootContainer");
@@ -39,9 +38,12 @@ public class MultipleDubboBootContainer {
 		return new ArrayList<>(runtimeContexts.values());
 	}
 
-	@Inject
-	@Named("applibs.dir")
 	private String appLibsDir;
+	
+	public MultipleDubboBootContainer(String appLibsDir) {
+		this.appLibsDir = appLibsDir;
+		System.setProperties(new MultipleDubboBootProperties());
+	}
 	
 	public void loadApplication() {
 		long startTime = System.currentTimeMillis();
@@ -132,12 +134,13 @@ public class MultipleDubboBootContainer {
 			for(File dependency : app.dependencies.listFiles()) {
 				dependencies.add(dependency.toURI().toURL());
 			}
-			dependencies.add(this.getClass().getResource("JettyContainerLoggerContextSelector.class").toURI().toURL());
-			
-			final PluginLibClassLoader currentClassLoader = new PluginLibClassLoader(app.appName, dependencies.toArray(new URL[] {}), oldClassLoader);
+//			dependencies.add(this.getClass().getResource("./logback/JettyContainerLoggerContextSelector.class").toURI().toURL());
+			final PluginLibClassLoader currentClassLoader = new PluginLibClassLoader(app.appName, dependencies.toArray(new URL[] {}),app.appLib.getParentFile().toURI().toURL(), oldClassLoader);
+//			final PluginLibClassLoader currentClassLoader = new PluginLibClassLoader(app.appName, dependencies.toArray(new URL[] {}), oldClassLoader);
 			Thread.currentThread().setContextClassLoader(currentClassLoader);
 			Class<?> bootClass = currentClassLoader.loadClass(app.mainClass);
-			
+			System.setProperty("system.name", app.appName);
+			System.setProperty("print.full.message","true");
 			Class<?> _springApplicationBuilderClazz = currentClassLoader.loadClass("org.springframework.boot.builder.SpringApplicationBuilder");
 			Method _source = _springApplicationBuilderClazz.getMethod("sources", Class[].class);
 			Method _profiles = _springApplicationBuilderClazz.getMethod("profiles", String[].class);
@@ -183,20 +186,43 @@ public class MultipleDubboBootContainer {
 			for(File dependency : app.dependencies.listFiles()) {
 				dependencies.add(dependency.toURI().toURL());
 			}
-			final PluginLibClassLoader currentClassLoader = new PluginLibClassLoader(app.appName, dependencies.toArray(new URL[] {}), oldClassLoader);
+//			dependencies.add(this.getClass().getResource("./logback/JettyContainerLoggerContextSelector.class").toURI().toURL());
+			log.debug("start init pluginlibclassloader");
+			final PluginLibClassLoader currentClassLoader = new PluginLibClassLoader(app.appName, dependencies.toArray(new URL[] {}),app.appLib.getParentFile().toURI().toURL(), oldClassLoader);
+//			final PluginLibClassLoader currentClassLoader = new PluginLibClassLoader(app.appName,dependencies.toArray(new URL[] {}));
+			log.debug("start switch thread context class loader");
 			Thread.currentThread().setContextClassLoader(currentClassLoader);
+			System.setProperty("system.name", app.appName);
+			System.setProperty("print.full.message","true");
+			log.debug("start load _classPathXmlApplicationContextClazz");
 			Class<?> _classPathXmlApplicationContextClazz = currentClassLoader.loadClass("org.springframework.context.support.ClassPathXmlApplicationContext");
+			log.debug("start load classpathxmlapplicationcontext construcotr");
 			Constructor<?> constructor = _classPathXmlApplicationContextClazz.getConstructor(String[].class,boolean.class);
+			log.debug("start load classpathxmlapplicationcontext _refresh");
 			Method _refresh = _classPathXmlApplicationContextClazz.getMethod("refresh");
+			log.debug("start load classpathxmlapplicationcontext _start");
 			Method _start = _classPathXmlApplicationContextClazz.getMethod("start");
+			log.debug("start load classpathxmlapplicationcontext _getEnvironment");
 			Method _getEnvironment = _classPathXmlApplicationContextClazz.getMethod("getEnvironment");
+			log.debug("start load _configurableEnvironmentClazz _getEnvironment");
 			Class<?> _configurableEnvironmentClazz = currentClassLoader.loadClass("org.springframework.core.env.ConfigurableEnvironment");
+			log.debug("start load configurableEnvironmentClazz _setActiveProfiles");
 			Method _setActiveProfiles = _configurableEnvironmentClazz.getMethod("setActiveProfiles", String[].class);
+			log.debug("start init _classPathXmlApplicationContext Object");
 			Object _classPathXmlApplicationContext = constructor.newInstance(new String[] {"applicationContext.xml"}, false);
+			log.debug("start invoke _classPathXmlApplicationContext _getEnvironment method");
 			Object environment = _configurableEnvironmentClazz.cast(_getEnvironment.invoke(_classPathXmlApplicationContext));
+			log.debug("start set up offline profile");
 			_setActiveProfiles.invoke(environment, new Object[] {new String[] {"offline"}});
+			log.debug("start refresh spring application context");
 			_refresh.invoke(_classPathXmlApplicationContext);
+			log.debug("starting spring application context");
 			_start.invoke(_classPathXmlApplicationContext);
+			
+//			Class<?> cachemain = currentClassLoader.loadClass("com.gb.soa.omp.ccache.CacheMain");
+//			Method mainEnter = cachemain.getDeclaredMethod("main", String[].class);
+//			mainEnter.invoke(null, new Object[] {new String[] {}});
+			
 			AppRuntimeContext runtimeContext = new AppRuntimeContext();
 			runtimeContext.setCode(0);
 			runtimeContext.setArtifactId(app.appName);
@@ -226,6 +252,60 @@ public class MultipleDubboBootContainer {
 		return this.innerInfoHolder.get(appName).load();
 	}
 
+//	public static class PluginLibClassLoader extends URLClassLoader {
+//		
+//		private String appName;
+//		
+//		private ClassLoader parent;
+//		
+//		public PluginLibClassLoader(String appName, URL[] urls, ClassLoader parent) {
+//			super(urls,parent);
+//			this.parent = parent;
+//			this.appName = appName;
+//		}
+//		
+//		public String appName() {
+//			return this.appName;
+//		}
+//		
+//		@Override
+//	    protected synchronized Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+//	        Class<?> clazz = findLoadedClass(name);
+//	        if (clazz == null) {
+//	            if (onLoadClass(name)) {
+//	                clazz = findClass(name);
+//	            } else {
+//	                try {
+//	                    clazz = parent.loadClass(name);
+//	                } catch (ClassNotFoundException ignore) {
+//	                }
+//	                if (clazz == null) {
+//	                    clazz = findClass(name);
+//	                }
+//	            }
+//	        }
+//	        if (resolve) {
+//	            resolveClass(clazz);
+//	        }
+//	        return clazz;
+//	    }
+//		
+//		private static final String[] PINPOINT_PROFILER_CLASS = new String[] {//slf4j的包重新加载，不从父加载器加载
+////				"org.slf4j","ch.qos.logback",
+//				"org.apache.http"
+//		};
+//		
+//	    boolean onLoadClass(String clazzName) {
+//	    	final int length = PINPOINT_PROFILER_CLASS.length;
+//	        for (int i = 0; i < length; i++) {
+//	            if (clazzName.startsWith(PINPOINT_PROFILER_CLASS[i])) {
+//	                return true;
+//	            }
+//	        }
+//	        return false;
+//	    }
+//	}
+	
 	public static class PluginLibClassLoader extends URLClassLoader {
 		
 		final public static String GROOVY_AUTOCONFIG_FILE = "logback.groovy";
@@ -233,33 +313,39 @@ public class MultipleDubboBootContainer {
 	    final public static String TEST_AUTOCONFIG_FILE = "logback-test.xml";
 		
 		private static final String[] PINPOINT_PROFILER_CLASS = new String[] {//slf4j的包重新加载，不从父加载器加载
-	            "org.slf4j","ch.qos.logback"
+	            "org.slf4j","ch.qos.logback","org.apache.http"
 	    };
 		
 		private String appName;
+		
+		private URL rootURL;
 		
 		Map<String, URI> singleClasses = new HashMap<>();
 		
 		private final ClassLoader parent;
 		
-		public PluginLibClassLoader(String appName, URL[] urls) {
+		public PluginLibClassLoader(String appName, URL[] urls, URL rootURL) {
 			super(urls);
 			this.appName = appName;
 			this.parent = null;
+			this.rootURL = rootURL;
 			appendSingleClasses();
 		}
-		public PluginLibClassLoader(String appName,URL[] urls,ClassLoader parent) {
+		public PluginLibClassLoader(String appName,URL[] urls, URL rootURL,ClassLoader parent) {
 			super(urls, parent);
 			this.appName = appName;
 			this.parent = parent;
+			this.rootURL = rootURL;
 			appendSingleClasses();
 		}
 		
 		private void appendSingleClasses() {
 			try {
-				this.addSingleClass("com.gb.pos.jettycontainer.JettyContainerLoggerContextSelector", this.getClass().getResource("JettyContainerLoggerContextSelector.class").toURI());
-				this.addSingleClass("com.gb.pos.jettycontainer.Assert", this.getClass().getResource("Assert.class").toURI());
-				this.addSingleClass("com.gb.pos.jettycontainer.LogbackConfigurator", this.getClass().getResource("LogbackConfigurator.class").toURI());
+				this.addSingleClass("com.gb.pos.jettycontainer.logback.JettyContainerLoggerContextSelector", this.getClass().getResource("logback/JettyContainerLoggerContextSelector.class").toURI());
+				this.addSingleClass("com.gb.pos.jettycontainer.logback.Assert", this.getClass().getResource("logback/Assert.class").toURI());
+				this.addSingleClass("com.gb.pos.jettycontainer.logback.LogbackConfigurator", this.getClass().getResource("logback/LogbackConfigurator.class").toURI());
+				this.addSingleClass("com.gb.pos.jettycontainer.logback.ErrLogFilter", this.getClass().getResource("logback/ErrLogFilter.class").toURI());
+				this.addSingleClass("com.gb.pos.jettycontainer.logback.InfoLogFilter", this.getClass().getResource("logback/InfoLogFilter.class").toURI());
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
@@ -307,13 +393,25 @@ public class MultipleDubboBootContainer {
 	        }
 	        return false;
 	    }
+	    
+	    private FileSystem initFileSystem(URI uri) throws IOException {
+	    	try {
+	    		return FileSystems.getFileSystem(uri);
+			} catch (Exception e) {
+				Map<String, String> env = new HashMap<>();
+	            env.put("create", "true");
+	            return FileSystems.newFileSystem(uri, env);
+			}
+	    }
 		
 		@Override
 		public Class<?> findClass(String name) throws ClassNotFoundException {
 			if(singleClasses.containsKey(name)) {
 				try {
+					FileSystem zipfs = initFileSystem(singleClasses.get(name));
 					byte[] cLassBytes = Files.readAllBytes(Paths.get(singleClasses.get(name)));
 					Class<?> clazz = defineClass(name, cLassBytes, 0, cLassBytes.length);
+					zipfs.close();
 					return clazz;
 				} catch (IOException e) {
 					throw new ClassNotFoundException(name);
@@ -323,14 +421,17 @@ public class MultipleDubboBootContainer {
 			}
 		}
 		
-		/* (non-Javadoc)
+		/* 
 		 * 重写findResource，让logback以为jar包中没有logback.xml,logback.grovery等配置文件
 		 * @see java.net.URLClassLoader#findResource(java.lang.String)
 		 */
 		@Override
-		public URL findResource(final String name) { 
+		public URL findResource(final String name) {
 			if(name.equals(AUTOCONFIG_FILE) || name.equals(GROOVY_AUTOCONFIG_FILE) || name.equals(TEST_AUTOCONFIG_FILE)) {
 				return null;
+			}
+			if(name.equals("")) {
+				return this.rootURL;
 			}
 			return super.findResource(name);
 		}

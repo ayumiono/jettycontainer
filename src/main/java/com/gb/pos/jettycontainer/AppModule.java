@@ -15,11 +15,11 @@ public class AppModule extends AbstractModule {
 			binder().bindConstant().annotatedWith(Names.named("applibs.dir")).to(appLibsDir);
 			if(rootDir == null) throw new RuntimeException("请配置-Droot.dir参数，指定项目根目录");
 			binder().bindConstant().annotatedWith(Names.named("root.dir")).to(rootDir);
-			bind(MultipleDubboBootContainer.class).toInstance(new MultipleDubboBootContainer());
+			bind(MultipleDubboBootContainer.class).toInstance(new MultipleDubboBootContainer(appLibsDir));
 			bind(AppRuntimeInfoInterface.class).to(AppRuntimeInfoRestImpl.class).in(Scopes.SINGLETON);
 			bind(PidLockFileHandle.class).toInstance(new PidLockFileHandle());
 		} catch (Exception e) {
-			throw new RuntimeException("AppModule configure failed!");
+			throw new RuntimeException("AppModule configure failed!",e);
 		}
 	}
 
